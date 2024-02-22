@@ -1,3 +1,0 @@
-/home/jackson/Documents/Code/raycastingsdl/build/CMakeFiles/raycaster.dir
-/home/jackson/Documents/Code/raycastingsdl/build/CMakeFiles/edit_cache.dir
-/home/jackson/Documents/Code/raycastingsdl/build/CMakeFiles/rebuild_cache.dir
