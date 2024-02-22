@@ -1,157 +1,149 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_error.h>
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_pixels.h>
-#include <SDL2/SDL_rect.h>
-#include <SDL2/SDL_scancode.h>
-#include <SDL2/SDL_surface.h>
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
 
 #include <math.h>
-
+#include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <stdlib.h>
 
-const int SCREEN_WIDTH = 1280;
-const int SCREEN_HEIGHT = 720;
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
-const int map[8][8] = {
-	{1,1,1,1,1,1,1,1},
-	{1,0,0,0,0,0,0,1},
-	{1,0,0,0,0,0,0,1},
-	{1,0,0,0,0,0,0,1},
-	{1,0,0,0,0,0,0,1},
-	{1,0,0,0,0,0,0,1},
-	{1,0,0,0,0,0,0,1},
-	{1,1,1,1,1,1,1,1}
-};
+uint32_t pixels[SCREEN_WIDTH * SCREEN_HEIGHT];
 
-double degreeToRadians(double degree) {
+typedef struct {
+	double x;
+	double y;
+} vec2;
+
+double dirToRadians(vec2 direction) {
 	double pi = M_PI;
+	double degree = atan2(direction.x, direction.y);
 	return degree * pi / 180.0;
 }
 
+int map[8][8] = {
+	{1,1,1,1,1,1,1,1},
+	{1,0,3,0,0,0,0,1},
+	{1,0,0,0,0,0,0,1},
+	{1,0,0,0,2,0,0,1},
+	{1,0,0,0,0,0,0,1},
+	{1,4,0,0,0,0,0,1},
+	{1,0,0,3,0,0,0,1},
+	{1,1,1,1,1,1,1,1}
+};
+
+void verline(int x, int y0, int y1, uint32_t color) {
+	for (int y = y0; y < y1; y++) {
+		pixels[(y * SCREEN_WIDTH) + x] = color;
+	}
+}
+
 int main() {
-	SDL_Window* window = NULL;
-
-	SDL_Surface* screenSurface = NULL;
-
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		printf("SDL could not initialize! SDL_ERROR: %s\n", SDL_GetError());
+		printf("SDL Initialization Failed. SDL_GETERROR: %s\n", SDL_GetError());
 		return -1;
 	}
 
-	window = SDL_CreateWindow("Raycaster", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-	if (window == NULL) {
-		printf("Window could not be created! SDL_ERROR: %s\n", SDL_GetError());
-		return -1;
-	}
+	//need to add error checking for these
+	SDL_Window* window = SDL_CreateWindow("game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_ALLOW_HIGHDPI);
 
-	screenSurface = SDL_GetWindowSurface(window);
+	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-	//player position
-	double xPos = 2;
-	double yPos = 2;
+	SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	//player direction
-	double playerDirection = 180;
-	double playerFov = 60;
-	
-	double playerSpeed = .25;
-	double playerRotation = 5.0;
+	/*Use SDL_UpdateTexture to update window
+	 * Should be updated every main cycle
+	 * Pixels need to be in the same format as the texture
+	 */
 
-	//main loop flag
+	vec2 pos = {2.0, 2.0};
+	vec2 dir = {-1.0, 0.0};
+	vec2 plane = {0.0, 0.577};
+
+	double time = 0, oldTime = 0;
+
 	bool quit = false;
-	
-	//SDL events
-	SDL_Event e;
-
 	while (!quit) {
-		while (SDL_PollEvent(&e) != 0) {
-			if (e.type == SDL_QUIT) {
-				quit = true;
-			} else if (e.type == SDL_KEYDOWN) {
-				double playerCos = cos(degreeToRadians(playerDirection)) * playerSpeed;
-				double playerSin = sin(degreeToRadians(playerDirection)) * playerSpeed;
-				
-				if (e.key.keysym.sym == SDLK_w) {
-					xPos += playerCos;
-					yPos += playerSin;
-				} 
-				else if (e.key.keysym.sym == SDLK_s) {
-					xPos -= playerCos;
-					yPos -= playerSin;
-				}
-
-				if (e.key.keysym.sym == SDLK_d) {
-					playerDirection += playerRotation;
-					playerDirection = fmod(playerDirection, 360.0);
-				} else if (e.key.keysym.sym == SDLK_a) {
-					playerDirection -= playerRotation;
-					playerDirection = fmod(playerDirection, 360.0);
-				}
-			}
-		}
-
-		//game logic
-		SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
-
-		double rayAngle = playerDirection - (playerFov/2);
-		
 		for (int rayCount = 0; rayCount < SCREEN_WIDTH; rayCount++) {
-			double rayX = xPos;
-			double rayY = yPos;
+			double camX = 2 * rayCount / (double)SCREEN_WIDTH - 1;
+			vec2 ray = {dir.x + plane.x * camX, dir.y + plane.y * camX};
 
-			double startCos = cos(degreeToRadians(rayAngle));
-			double startSin = sin(degreeToRadians(rayAngle));
-			
-			int iXPos = (int)xPos;
-			int iYPos = (int)yPos;
-			
-			double xStep = fabs(xPos - (double)iXPos);
-			double yStep = fabs(yPos - (double)iYPos);
+			vec2 mapPos = {(int)pos.x, (int)pos.y};
 
-			int wall = 0;
-			while (wall == 0) {
-				rayX += startCos;
-				rayY += startSin;
-				wall = map[(int)(rayX)][(int)(rayY)];
+			vec2 sideDist = {0, 0};
+
+			vec2 deltaDist = {0, 0};
+			deltaDist.x = (ray.x == 0) ? 1e30 : fabs(1/ray.x);
+			deltaDist.y = (ray.y == 0) ? 1e30 : fabs(1/ray.y);
+			double perpWallDist;
+
+			int stepX;
+			int stepY;
+
+			int hit = 0;
+			int side;
+
+			if (ray.x < 0) {
+				stepX = -1;
+				sideDist.x = (pos.x - mapPos.x) * deltaDist.x;
+			} else {
+				stepX = 1;
+				sideDist.x = (mapPos.x + 1.0 - pos.x) * deltaDist.x;
 			}
 
-			double distance = sqrt(pow(xPos - rayX, 2) + pow(yPos - rayY, 2));
-			//printf("distance1: %f\n", distance);
-	
-			//fish eye distortion fix?
-			distance = distance * cos(degreeToRadians(rayAngle - playerDirection));
-			//printf("distance2: %f\n", distance);
+			if (ray.y < 0) {
+				stepY = -1;
+				sideDist.y = (pos.y - mapPos.y) * deltaDist.y;
+			} else {
+				stepY = 1;
+				sideDist.y = (mapPos.y + 1.0 - pos.y) * deltaDist.y;
+			}
 
-			double wallHeight = SCREEN_HEIGHT/2.0/distance;
-			//double wallHeight = floor((SCREEN_HEIGHT/2.0)/distance);
-			
-			//printf("column number: %d\n", rayCount);
-			//printf("distance3: %f\n", distance);
-			//printf("wallheight : %f\n", wallHeight);
-			//printf("Player Direction: %f\n", playerDirection);
+			while (hit == 0) {
+				if (sideDist.x < sideDist.y) {
+					sideDist.x += deltaDist.x;
+					mapPos.x += stepX;
+					side = 0;
+				} else {
+					sideDist.y += deltaDist.y;
+					mapPos.y += stepY;
+					side = 1;
+				}
 
-			SDL_Rect column;
-			column.x = rayCount;
-			column.y = (SCREEN_HEIGHT/2.0) - (wallHeight);
-			column.w = 1;
-			column.h = wallHeight*2;
+				if (map[(int)mapPos.x][(int)mapPos.y] > 0) hit = 1;
+			}
 
-			SDL_FillRect(screenSurface, &column, SDL_MapRGB(screenSurface->format, 0, 255, 0));
+			if (side == 0) perpWallDist = (sideDist.x - deltaDist.x);
+			else perpWallDist = (sideDist.y - deltaDist.y);
 
-			rayAngle += playerFov / SCREEN_WIDTH;
+			double wallHeight = (double)SCREEN_HEIGHT / perpWallDist;
+			double drawStart = -wallHeight / 2.0 + (double)SCREEN_HEIGHT / 2.0;
+			if (drawStart < 0) drawStart = 0;
+			double drawEnd = wallHeight / 2.0 + (double)SCREEN_HEIGHT / 2.0;
+			if (drawEnd >= SCREEN_HEIGHT) drawEnd = (double)SCREEN_HEIGHT - 1.0;
+
+			uint32_t color;
+			switch (map[(int)mapPos.x][(int)mapPos.y]) {
+				case 1: color = 0xFF0000FF; break;
+				case 2: color = 0xFF00FF00; break;
+				case 3: color = 0xFFFF0000; break;
+				case 4: color = 0xFFFF00FF; break;
+			}
+
+			verline(rayCount, drawStart, drawEnd, color);
 		}
 
-		SDL_UpdateWindowSurface(window);
+		SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH*4);
+
+		SDL_RenderPresent(renderer);
 	}
 
+	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
-
 	SDL_Quit();
-
 	return 0;
 }
