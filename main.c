@@ -1,5 +1,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_error.h>
+#include <SDL2/SDL_events.h>
+#include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
@@ -8,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include <time.h>
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -50,10 +54,24 @@ int main() {
 
 	//need to add error checking for these
 	SDL_Window* window = SDL_CreateWindow("game", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_ALLOW_HIGHDPI);
+	if (window == NULL) {
+		printf("Window Creation Failed. SDL_GETERROR: %s\n", SDL_GetError());
+		return -1;
+	}
 
 	SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	if (renderer == NULL) {
+		printf("Renderer Creation Failed. SDL_GETERROR: %s\n", SDL_GetError());
+		return -1;
+	}
 
 	SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+	if (texture == NULL) {
+		printf("Texture Creation Failed. SDL_GETERROR: %s\n", SDL_GetError());
+		return -1;
+	}
+
+	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 
 	/*Use SDL_UpdateTexture to update window
 	 * Should be updated every main cycle
@@ -64,10 +82,64 @@ int main() {
 	vec2 dir = {-1.0, 0.0};
 	vec2 plane = {0.0, 0.577};
 
-	double time = 0, oldTime = 0;
+	clock_t time = 0, oldTime = 0;
+	
+	double oldDirX;
+	double oldPlaneX;
+
+	SDL_Event e;
 
 	bool quit = false;
 	while (!quit) {
+		//oldTime = time;
+		//time = clock();
+		//double deltaTime = difftime(time, oldTime) / 1000.0;
+
+		double moveSpeed = 5.0 * 0.016f;
+		double rotSpeed = 3.0 * 0.016f;
+
+		memset(pixels, 0, sizeof(pixels));
+
+		while (SDL_PollEvent(&e)) {
+			switch(e.type) {
+				case SDL_QUIT:
+					quit = true;
+					break;
+				case SDL_KEYDOWN:
+					switch (e.key.keysym.sym) {
+						case SDLK_w:
+							if (map[(int)(pos.x + dir.x * moveSpeed)][(int)(pos.y)] == false) 
+								pos.x += dir.x * moveSpeed;
+							if (map[(int)(pos.x)][(int)(pos.y + dir.y * moveSpeed)] == false) 
+								pos.y += dir.y * moveSpeed;
+							break;
+						case SDLK_s:
+							if (map[(int)(pos.x - dir.x * moveSpeed)][(int)(pos.y)] == false) 
+								pos.x -= dir.x * moveSpeed;
+							if (map[(int)(pos.x)][(int)(pos.y - dir.y * moveSpeed)] == false) 
+								pos.y -= dir.y * moveSpeed;
+							break;
+						case SDLK_d:
+							oldDirX = dir.x;
+							dir.x = dir.x * cos(-rotSpeed) - dir.y * sin(-rotSpeed);
+							dir.y = oldDirX * sin(-rotSpeed) + dir.y * cos(-rotSpeed);
+							oldPlaneX = plane.x;
+							plane.x = plane.x * cos(-rotSpeed) - plane.y * sin(-rotSpeed);
+							plane.y = oldPlaneX * sin(-rotSpeed) + plane.y * cos(-rotSpeed);
+							break;
+						case SDLK_a:
+							oldDirX = dir.x;
+							dir.x = dir.x * cos(rotSpeed) - dir.y * sin(rotSpeed);
+							dir.y = oldDirX * sin(rotSpeed) + dir.y * cos(rotSpeed);
+							oldPlaneX = plane.x;
+							plane.x = plane.x * cos(rotSpeed) - plane.y * sin(rotSpeed);
+							plane.y = oldPlaneX * sin(rotSpeed) + plane.y * cos(rotSpeed);
+							break;
+					}
+				break;
+			}
+		}
+
 		for (int rayCount = 0; rayCount < SCREEN_WIDTH; rayCount++) {
 			double camX = 2 * rayCount / (double)SCREEN_WIDTH - 1;
 			vec2 ray = {dir.x + plane.x * camX, dir.y + plane.y * camX};
@@ -137,11 +209,19 @@ int main() {
 			verline(rayCount, drawStart, drawEnd, color);
 		}
 
-		SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH*4);
+		if (SDL_UpdateTexture(texture, NULL, pixels, SCREEN_WIDTH*4) < 0) {
+			printf("Failed to Update Texture. SDL_GETERROR: %s\n", SDL_GetError());
+			return -1;
+		}
+
+		SDL_RenderClear(renderer);
+
+		SDL_RenderCopyEx(renderer, texture, NULL, NULL, 0.0, NULL, SDL_FLIP_VERTICAL);
 
 		SDL_RenderPresent(renderer);
 	}
 
+	SDL_DestroyTexture(texture);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
