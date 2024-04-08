@@ -24,7 +24,7 @@ typedef struct {
 } vec2;
 
 double dirToRadians(vec2 direction) {
-	double pi = M_PI;
+	double pi = 3.14159265358979323846;
 	double degree = atan2(direction.x, direction.y);
 	return degree * pi / 180.0;
 }
@@ -80,7 +80,7 @@ int main() {
 
 	vec2 pos = {2.0, 2.0};
 	vec2 dir = {-1.0, 0.0};
-	vec2 plane = {0.0, 0.577};
+	vec2 plane = {0.0, 1.0};
 
 	clock_t time = 0, oldTime = 0;
 	
@@ -141,11 +141,13 @@ int main() {
 		}
 
 		for (int rayCount = 0; rayCount < SCREEN_WIDTH; rayCount++) {
+			//column we are working on
 			double camX = 2 * rayCount / (double)SCREEN_WIDTH - 1;
+			//vec of ray we are shooting
 			vec2 ray = {dir.x + plane.x * camX, dir.y + plane.y * camX};
-
+			//map position rounded to integers
 			vec2 mapPos = {(int)pos.x, (int)pos.y};
-
+			
 			vec2 sideDist = {0, 0};
 
 			vec2 deltaDist = {0, 0};

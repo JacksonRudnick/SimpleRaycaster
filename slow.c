@@ -29,7 +29,7 @@ const int map[8][8] = {
 };
 
 double degreeToRadians(double degree) {
-	double pi = M_PI;
+	double pi = 3.14159265358979323846;
 	return degree * pi / 180.0;
 }
 
